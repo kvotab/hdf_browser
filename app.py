@@ -1,5 +1,3 @@
-
-
 import base64
 import io
 import dash
@@ -645,11 +643,11 @@ def display_node_data(clicked_node):
     
     if global_file_2 and node_id in global_file_2:
         if global_file_2[node_id].attrs:
-            node_data += '\nAttributes in comparison file:'
+            node_data += '\n\nAttributes in comparison file:'
             for attr in global_file_2[node_id].attrs:
                 node_data += f'\n{attr}: {global_file_2[node_id].attrs[attr]}'
         if isinstance(global_file_2[node_id],h5py.Dataset):
-            node_data += f'\n\Data in comparison file: \n{global_file_2[node_id][()]}'
+            node_data += f'\n\nData in comparison file: \n{global_file_2[node_id][()]}'
     
     if 'time_dependent' in global_file_1[node_id].attrs and global_file_1[node_id].attrs['time_dependent'] and (isnode or 'IndexLists' in global_file_1[node_id].attrs):
         time_data_1 = global_file_1['time'][()]
