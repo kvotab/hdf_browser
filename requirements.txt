@@ -1,6 +1,4 @@
 dash==2.9.3
-base64
-io
 dash_blueprint_components
 h5py
 gunicorn
