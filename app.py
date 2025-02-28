@@ -463,18 +463,16 @@ def get_line_style(name):
     return line
     
 
-global_file_1 = None
-global_file_2 = None
+global_hdf_1 = None
+global_hdf_2 = None
 
 
 app = dash.Dash(__name__, suppress_callback_exceptions=True)
 server = app.server
 app.layout = html.Div([
-    dcc.Store(id='file-data-1'),
-    dcc.Store(id='file-data-2'),
     html.Div(children=[
         dcc.Upload(
-            id='upload-data-1',
+            id='upload-file-1',
             children=html.Div([
                 'Drag and Drop or ',
                 html.A('Select an HDF5 File')
@@ -492,7 +490,7 @@ app.layout = html.Div([
             multiple=False
         ),        
         dcc.Upload(
-            id='upload-data-2',
+            id='upload-file-2',
             children=html.Div([
                 'Drag and Drop or ',
                 html.A('Select an HDF5 File'),
@@ -513,19 +511,19 @@ app.layout = html.Div([
     ], style={'display': 'grid', 'gridTemplateColumns': '2.5fr 1.5fr'}),
     html.Div([
         dbc.Tree(
-            id='input',
+            id='tree',
             contents=[],
-            style={'height': '400px', 'overflow': 'auto', 'width': '45%', 'display': 'inline-block', 'verticalAlign': 'top'}
+            style={'height': '100vh', 'overflow': 'auto', 'width': '45%', 'display': 'inline-block', 'verticalAlign': 'top'}
         ),
         html.Div(id='node-data', style={'width': '95%', 'display': 'inline-block', 'verticalAlign': 'top', 'padding': '10px'}),
     
     ], style={'display': 'flex'}),  # Use flex display to arrange children side by side
-    html.Div(id='filename-1', style={'position': 'fixed', 'bottom': '10px', 'left': '10px', 'backgroundColor': 'lightgrey', 'padding': '5px', 'borderRadius': '5px'}),
-    html.Div(id='filename-2', style={'position': 'fixed', 'bottom': '10px', 'right': '10px', 'backgroundColor': 'lightgrey', 'padding': '5px', 'borderRadius': '5px'})
+    html.Div(id='show-filename-1', style={'position': 'fixed', 'bottom': '10px', 'left': '10px', 'backgroundColor': 'lightgrey', 'padding': '5px', 'borderRadius': '5px'}),
+    html.Div(id='show-filename-2', style={'position': 'fixed', 'bottom': '10px', 'right': '10px', 'backgroundColor': 'lightgrey', 'padding': '5px', 'borderRadius': '5px'})
 ])
 
 def open_hdf5(contents):
-    content_type, content_string = contents.split(',')
+    _, content_string = contents.split(',')
     decoded = base64.b64decode(content_string)
     buffer = io.BytesIO(decoded)
     return h5py.File(buffer, 'r')
@@ -534,7 +532,10 @@ def hdf5_to_tree(hdf5_group):
     def create_node(name, obj):
         node = {'id': name, 'label': name}
         if isinstance(obj, h5py.Group):
+            node['icon'] = 'folder-close'
             node['childNodes'] = [create_node(k, v) for k, v in obj.items()]
+        else:
+            node['icon'] = 'database'#'tag'
         return node
     return [create_node(k, v) for k, v in hdf5_group.items()]
 
@@ -545,138 +546,163 @@ def get_id_node(group,path):
     return name+'/'+get_id_node(group[name],path[1:])
 
 @app.callback(
-    [Output('input', 'contents',allow_duplicate=True),
-     Output('filename-1', 'children',allow_duplicate=True),
-     Output('file-data-1', 'data',allow_duplicate=True),],
-    Input('upload-data-1', 'contents'),
-    State('upload-data-1', 'filename'),
+    [
+     Output('tree', 'contents',allow_duplicate=True),
+     Output('show-filename-1', 'children',allow_duplicate=True),
+     Output('node-data', 'children',allow_duplicate=True),
+     ],
+    Input('upload-file-1', 'contents'),
+    State('upload-file-1', 'filename'),
     prevent_initial_call=True
 )
-def update_tree_1(contents, filename):
-    global global_file_1
+def upload_file_1(contents, filename):
+    global global_hdf_1
     if contents is None:
-        return [], "", None
-    global_file_1 = open_hdf5(contents)
-    tree_data = hdf5_to_tree(global_file_1)
-    return tree_data, f"Loaded file: {filename}",contents
+        if global_hdf_1 is not None:
+            global_hdf_1.close()
+            global_hdf_1 = None
+        return [], "",""
+    global_hdf_1 = open_hdf5(contents)
+    tree_data = hdf5_to_tree(global_hdf_1)
+    
+    return tree_data, f"Loaded file: {filename}",""
 
 @app.callback(
-    [Output('filename-2', 'children',allow_duplicate=True),
-     Output('file-data-2', 'data',allow_duplicate=True)],
-    Input('upload-data-2', 'contents'),
-    State('upload-data-2', 'filename'),
+    [
+     Output('show-filename-2', 'children',allow_duplicate=True),
+     Output('node-data', 'children',allow_duplicate=True),
+     ],
+    Input('upload-file-2', 'contents'),
+    State('upload-file-2', 'filename'),
     prevent_initial_call=True
 )
-def update_tree_2(contents, filename):
-    global global_file_2
+def upload_file_2(contents, filename):
+    global global_hdf_2
     if contents is None:
-        return "",None
-    global_file_2 = open_hdf5(contents)
-    return f"Loaded file for comparison: {filename}", contents
+        if global_hdf_2 is not None:
+            global_hdf_2.close()
+            global_hdf_2 = None
+        return "",""
+    global_hdf_2 = open_hdf5(contents)
+    return f"Loaded file for comparison: {filename}",""
 
 @app.callback(
-    [Output('input', 'contents',allow_duplicate=True),
-     Output('filename-1', 'children',allow_duplicate=True),
-     Output('file-data-1', 'data',allow_duplicate=True),
-     Output('node-data', 'children',allow_duplicate=True),],
-    Input('filename-1', 'n_clicks'),
+    [
+     Output('upload-file-1', 'contents',allow_duplicate=True),
+     Output('tree', 'contents',allow_duplicate=True),
+     Output('show-filename-1', 'children',allow_duplicate=True),
+     Output('node-data', 'children',allow_duplicate=True),
+     ],
+    Input('show-filename-1', 'n_clicks'),
     prevent_initial_call=True
 )
 def clear_file_1(n_clicks):
-    if 'filename-1' in [p['prop_id'] for p in dash.callback_context.triggered][0]:
-    #if n_clicks:
-        global global_file_1
-        global_file_1 = None
-        return [], "", None, ""
-    return dash.no_update
+    global global_hdf_1
+    if global_hdf_1 is not None:
+        global_hdf_1.close()
+        global_hdf_1 = None
+    return None,[], "",""
+    
+    
+    # if 'show-filename-1' in [p['prop_id'] for p in dash.callback_context.triggered][0]:
+    # #if n_clicks:
+    #     # global global_hdf_1
+    #     # global_hdf_1 = None
+    #     return [], "", "",  None
+    # return dash.no_update
 
 @app.callback(
-    [Output('filename-2', 'children',allow_duplicate=True),
-     Output('file-data-2', 'data',allow_duplicate=True),
-     Output('node-data', 'children',allow_duplicate=True),],
-    Input('filename-2', 'n_clicks'),
+     Output('upload-file-2', 'contents',allow_duplicate=True),
+    [Output('show-filename-2', 'children',allow_duplicate=True),
+     Output('node-data', 'children',allow_duplicate=True),
+     ],
+    Input('show-filename-2', 'n_clicks'),
     prevent_initial_call=True
 )
 def clear_file_2(n_clicks):
-    if 'filename-2' in [p['prop_id'] for p in dash.callback_context.triggered][0]:
-    #if n_clicks:
-        global global_file_2
-        global_file_2 = None
-        return "",  None, ""
-    return dash.no_update
+    
+    global global_hdf_2
+    if global_hdf_2 is not None:
+        global_hdf_2.close()
+        global_hdf_2 = None
+    return None,"",""
+    
+    # if 'show-filename-2' in [p['prop_id'] for p in dash.callback_context.triggered][0]:
+    # #if n_clicks:
+    #     # global global_hdf_2
+    #     # global_hdf_2 = None
+    #     return "",  "",  None
+    # return dash.no_update
 
 @app.callback(
     Output('graph', 'figure',allow_duplicate=True),
     Input('checkbox-log', 'value'),
-    Input('graph', 'figure'),
+    State('graph', 'figure'),
     prevent_initial_call=True,
 )
-def toggle_log_x(value,fig):
+def toggle_log_x(value,figure):
     if 'log-x' in value:
-        fig['layout']['xaxis']['type'] = 'log'
+        figure['layout']['xaxis']['type'] = 'log'
     else:
-        fig['layout']['xaxis']['type'] = 'linear'
+        figure['layout']['xaxis']['type'] = 'linear'
     if 'log-y' in value:
-        fig['layout']['yaxis']['type'] = 'log'
+        figure['layout']['yaxis']['type'] = 'log'
     else:
-        fig['layout']['yaxis']['type'] = 'linear'
-    return fig
-
-
+        figure['layout']['yaxis']['type'] = 'linear'
+    return figure
 
 @app.callback(
     Output('node-data', 'children',allow_duplicate=True),
-    Input('input', 'clicked_node'),
+    Input('tree', 'clicked_node'),
     prevent_initial_call=True
 )
 def display_node_data(clicked_node):
     if not clicked_node:
         return ''
-    #global global_file
-    node_id = get_id_node(global_file_1,clicked_node['path'])
-    isnode = isinstance(global_file_1[node_id],h5py.Dataset)
-    node_data = f'Attributes of {"node" if isnode else "group"}' if global_file_1[node_id].attrs else ''
-    for attr in global_file_1[node_id].attrs:
-        node_data += f'\n{attr}: {global_file_1[node_id].attrs[attr]}'
+    node_id = get_id_node(global_hdf_1,clicked_node['path'])
+    isnode = isinstance(global_hdf_1[node_id],h5py.Dataset)
+    node_data = f'Attributes of {"node" if isnode else "group"}' if global_hdf_1[node_id].attrs else ''
+    for attr in global_hdf_1[node_id].attrs:
+        node_data += f'\n{attr}: {global_hdf_1[node_id].attrs[attr]}'
     if isnode:
-        node_data += f'\n\nData: \n{global_file_1[node_id][()]}'
+        node_data += f'\n\nData: \n{global_hdf_1[node_id][()]}'
     
-    if global_file_2 and node_id in global_file_2:
-        if global_file_2[node_id].attrs:
+    if global_hdf_2 and node_id in global_hdf_2:
+        if global_hdf_2[node_id].attrs:
             node_data += '\n\nAttributes in comparison file:'
-            for attr in global_file_2[node_id].attrs:
-                node_data += f'\n{attr}: {global_file_2[node_id].attrs[attr]}'
-        if isinstance(global_file_2[node_id],h5py.Dataset):
-            node_data += f'\n\nData in comparison file: \n{global_file_2[node_id][()]}'
+            for attr in global_hdf_2[node_id].attrs:
+                node_data += f'\n{attr}: {global_hdf_2[node_id].attrs[attr]}'
+        if isinstance(global_hdf_2[node_id],h5py.Dataset):
+            node_data += f'\n\nData in comparison file: \n{global_hdf_2[node_id][()]}'
     
-    if 'time_dependent' in global_file_1[node_id].attrs and global_file_1[node_id].attrs['time_dependent'] and (isnode or 'IndexLists' in global_file_1[node_id].attrs):
-        time_data_1 = global_file_1['time'][()]
-        if global_file_2 and 'time' in global_file_2:
-            time_data_2 = global_file_2['time'][()] if global_file_2 else None
+    if 'time_dependent' in global_hdf_1[node_id].attrs and global_hdf_1[node_id].attrs['time_dependent'] and (isnode or 'IndexLists' in global_hdf_1[node_id].attrs):
+        time_data_1 = global_hdf_1['time'][()]
+        if global_hdf_2 and 'time' in global_hdf_2:
+            time_data_2 = global_hdf_2['time'][()] if global_hdf_2 else None
         else:
             time_data_2 = None
-        if 'unit' in global_file_1[node_id].attrs:
-            unit = global_file_1[node_id].attrs['unit']
+        if 'unit' in global_hdf_1[node_id].attrs:
+            unit = global_hdf_1[node_id].attrs['unit']
         else:
             unit = None
-        if 'unit' in global_file_1['time'].attrs:
-            time_unit = global_file_1['time'].attrs['unit']
+        if 'unit' in global_hdf_1['time'].attrs:
+            time_unit = global_hdf_1['time'].attrs['unit']
         else:
             time_unit = 'years AD'
         if isnode:
-            data = [{'x': time_data_1, 'y': global_file_1[node_id][()], 'type': 'line', 'name': node_id}]
-            if time_data_2 is not None and node_id in global_file_2:
-                data.append({'x': time_data_2, 'y': global_file_2[node_id][()], 'mode': 'lines','line':dict(color='black',dash='dot'), 'name': f"{node_id} (Compare)"})            
+            data = [{'x': time_data_1, 'y': global_hdf_1[node_id][()], 'type': 'line', 'name': node_id}]
+            if time_data_2 is not None and node_id in global_hdf_2:
+                data.append({'x': time_data_2, 'y': global_hdf_2[node_id][()], 'mode': 'lines','line':dict(color='black',dash='dot'), 'name': f"{node_id} (Compare)"})            
             legend = dict(yanchor="top",y=0.99,xanchor="right",x=0.99)
         else:
             data = []
-            for index in global_file_1['IndexLists'][global_file_1[node_id].attrs['IndexLists'][0]]:
-                y_data_1 = global_file_1[node_id][index][()]
+            for index in global_hdf_1['IndexLists'][global_hdf_1[node_id].attrs['IndexLists'][0]]:
+                y_data_1 = global_hdf_1[node_id][index][()]
                 name = index.decode() # Since variable length strings are stored as byte sequences in HDF5
                 line = get_line_style(name)
                 data.append({'x': time_data_1, 'y': y_data_1, 'mode': 'lines', 'line': line, 'name': name})
-                if time_data_2 is not None and node_id in global_file_2 and index in global_file_2[node_id]:
-                    y_data_2 = global_file_2[node_id][index][()]
+                if time_data_2 is not None and node_id in global_hdf_2 and index in global_hdf_2[node_id]:
+                    y_data_2 = global_hdf_2[node_id][index][()]
                     line = get_line_style(name)
                     line['width'] = 1
                     data.append({'x': time_data_2, 'y': y_data_2, 'mode': 'lines', 'line': line, 'name':name+' (Compare)'})#,'showlegend':False})
